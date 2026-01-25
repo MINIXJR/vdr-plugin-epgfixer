@@ -74,7 +74,11 @@ Syntax of regexp.conf line is
   of which the latter two use named backreferences.
 - Regular expressions use named backreferences with either title, shorttext,
   description or rating (parental rating).
-- By prepending "a" or "p" to backreference name (except rating field) the
+- Content/genre uses special syntax (?<content:VALUE>) where VALUE is the
+  DVB content nibble to set. Content is only set if not already present.
+  Example: m/Spielfilm(?<content:16>)/ sets Movie/Drama genre.
+  Common values: 16=Movie, 32=News, 48=Show, 64=Sports, 80=Children.
+- By prepending "a" or "p" to backreference name (except rating) the
   back referenced string is either appended or prepended to the original
   content of the target EPG field, respectively.
 - Perl-style operator 's/PATTERN/REPLACEMENT/' replaces match of PATTERN with

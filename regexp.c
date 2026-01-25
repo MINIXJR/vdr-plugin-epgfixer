@@ -17,8 +17,8 @@ cEpgfixerList<cRegexp, cEvent> EpgfixerRegexps;
 
 const char *strSources[] = { "title","shorttext","description","undefined" };
 
-typedef enum { ATITLE, PTITLE, TITLE, ASHORTTEXT, PSHORTTEXT, SHORTTEXT, ADESCRIPTION, PDESCRIPTION, DESCRIPTION, RATING } backrefs;
-const char *strBackrefs[] = { "atitle", "ptitle", "title", "ashorttext", "pshorttext", "shorttext", "adescription", "pdescription", "description", "rating" };
+typedef enum { ATITLE, PTITLE, TITLE, ASHORTTEXT, PSHORTTEXT, SHORTTEXT, ADESCRIPTION, PDESCRIPTION, DESCRIPTION, RATING, CONTENT } backrefs;
+const char *strBackrefs[] = { "atitle", "ptitle", "title", "ashorttext", "pshorttext", "shorttext", "adescription", "pdescription", "description", "rating", "content" };
 
 cRegexp::cRegexp()
 {
@@ -353,6 +353,7 @@ bool cRegexp::Apply(cEvent *Event, tChannelID ChannelID)
            // TODO allow duplicate backreference names?
            match_data = pcre2_match_data_create_from_pattern(re, NULL);
            pcre2_match(re, (PCRE2_SPTR8)*tmpstring, tmpstringlen, 0, 0, match_data, NULL);
+           // Process standard backreferences (title, shorttext, description, rating)
            while (i < 10) {
              if (pcre2_substring_get_byname(match_data, (PCRE2_SPTR8)strBackrefs[i], &capturestring, &capturelen) != PCRE2_ERROR_NOSUBSTRING) {
                 switch (i) {
@@ -402,6 +403,35 @@ bool cRegexp::Apply(cEvent *Event, tChannelID ChannelID)
                 }
               ++i;
               }
+
+           // Process content backreference separately - uses special syntax (?<content:VALUE>)
+           // where VALUE is the DVB content nibble to set (e.g. 16 for Movie/Drama)
+           {
+              uint32_t namecount = 0;
+              uint32_t nameentrysize = 0;
+              PCRE2_SPTR nametable = NULL;
+              pcre2_pattern_info(re, PCRE2_INFO_NAMECOUNT, &namecount);
+              pcre2_pattern_info(re, PCRE2_INFO_NAMEENTRYSIZE, &nameentrysize);
+              pcre2_pattern_info(re, PCRE2_INFO_NAMETABLE, &nametable);
+
+              for (uint32_t n = 0; n < namecount; n++) {
+                 PCRE2_SPTR entry = nametable + n * nameentrysize;
+                 // Skip first 2 bytes (group number), name starts at offset 2
+                 const char *name = (const char *)(entry + 2);
+                 if (strncmp(name, "content:", 8) == 0) {
+                    int contentValue = atoi(name + 8);
+                    // Only set content if not already present
+                    if (Event->Contents(0) == 0 && contentValue > 0) {
+                       uchar contents[MaxEventContents] = {0};
+                       contents[0] = (uchar)contentValue;
+                       Event->SetContents(contents);
+                       DEBUG_REGEXP("Apply() - Line %d: Set content to 0x%02X (%d)",
+                                    lineNumber, contents[0], contentValue);
+                       }
+                    break;
+                    }
+                 }
+           }
            pcre2_match_data_free(match_data);
            return true;
            }
